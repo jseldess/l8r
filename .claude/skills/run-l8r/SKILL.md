@@ -34,9 +34,14 @@ docker run -d --name l8r-pg \
 until docker exec l8r-pg pg_isready -U l8r >/dev/null 2>&1; do sleep 0.5; done
 
 # If the container already exists from a previous session, just restart it —
-# the seeded data persists, so you can skip steps 3-5. Prisma reconnects on the
-# next request, so a running dev server does not need restarting either:
+# the seeded data persists, so you can skip the migrate and seed steps (4a, 5).
+# Prisma reconnects on the next request, so a running dev server does not need
+# restarting either:
 #   docker start l8r-pg
+#
+# But do NOT skip step 3 or 4b. `.env` is gitignored, so unlike the container's
+# data it does not survive — a 4-hour-old container with intact data sat next to
+# no `.env` at all. Check, don't assume: `ls .env`.
 
 # 3. .env (gitignored). sslmode=disable — the container has no TLS, and the
 #    Neon-style sslmode=require in .env.example will fail against it.
@@ -45,10 +50,13 @@ DATABASE_URL="postgresql://l8r:l8r@localhost:55432/l8r?sslmode=disable"
 DIRECT_URL="postgresql://l8r:l8r@localhost:55432/l8r?sslmode=disable"
 EOF
 
-# 4. Schema + client. `prisma generate` must run BEFORE the seed: the seed
-#    imports @prisma/client and dies with MODULE_NOT_FOUND otherwise, even
-#    though package.json has a postinstall generate.
+# 4a. Schema. Skippable if the container already has the seeded data.
 npx prisma migrate deploy
+
+# 4b. Generate the client. NOT skippable — see "When to re-run prisma generate".
+#     It must also run BEFORE the seed: the seed imports @prisma/client and dies
+#     with MODULE_NOT_FOUND otherwise, even though package.json has a postinstall
+#     generate.
 npx prisma generate
 
 # 5. Seed. Note `npm run db:reset` does NOT seed — package.json has no
@@ -63,6 +71,26 @@ Ready in ~1s. `/` 307-redirects to `/dashboard`.
 
 To restart cleanly: stop the old server, then `lsof -ti:3000 | xargs -r kill -9`
 before relaunching, or Next will pick a different port.
+
+## When to re-run `prisma generate`
+
+Any time npm rewrites `node_modules` — `npm install`, and `npm uninstall <anything>` —
+the generated Prisma client is wiped and must be regenerated:
+
+```bash
+npx prisma generate
+```
+
+Skipping it does not look like a missing codegen step. `tsc`/`next build` fail with
+
+```
+src/lib/prisma.ts: Module '"@prisma/client"' has no exported member 'PrismaClient'.
+src/lib/services/order-service.ts: Parameter 'order' implicitly has an 'any' type.
+```
+
+plus ~20 more implicit-`any` cascades across the services — which reads like broken
+source code. If a dependency change is followed by a burst of those, regenerate first
+before debugging anything.
 
 ## Model access
 
@@ -127,5 +155,9 @@ passes back as `parentSpanId` so later turns nest in the same trace.
 ## Teardown
 
 ```bash
-docker stop l8r-pg          # data persists; `docker rm l8r-pg` to discard it
+lsof -ti:3000 | xargs -r kill -9   # stop the dev server
+docker stop l8r-pg                 # data persists; `docker rm l8r-pg` to discard it
 ```
+
+`.env` is gitignored and holds only the local DB URLs, so it is safe to leave in place —
+and leaving it means the next run can take the `docker start` shortcut.
