@@ -82,10 +82,14 @@ Every chat request is traced to the Braintrust project `l8r-customer-service` wh
 
 | Where | What it does |
 |-------|--------------|
-| `initLogger` in `src/lib/braintrust.ts` | Registers the logger for the project |
-| `wrapOpenAI` in `src/lib/braintrust.ts` | Turns every model call into an LLM span with messages, output, and token usage |
+| `wrapNextjsConfigWithBraintrust` in `next.config.mjs` | Enables Braintrust auto-instrumentation for the Next.js build |
+| `initLogger` in Next's instrumentation hook | Registers the logger for the project at server startup |
 | `wrapTracedTool` in `src/lib/chatbot/tool-executor.ts` | Wraps each tool as a `tool` span with its arguments and result |
-| `logger.startSpan` / `logger.traced` in `src/app/api/chat/route.ts` | Creates the `conversation` root span and a per-turn child span |
+| `startSpan` / `traced` in `src/app/api/chat/route.ts` | Creates the `conversation` root span and a per-turn child span |
+
+Model calls are traced automatically by the bundler plugin, so there is no call-site
+wrapper around the OpenAI client. Tool executions and the conversation/turn spans are
+explicit, since auto-instrumentation covers LLM clients rather than arbitrary functions.
 
 ### Multi-turn traces
 
@@ -105,7 +109,7 @@ attach to the existing trace instead of starting a new one.
 `src/lib/braintrust.ts` points the OpenAI client at the Braintrust gateway:
 
 ```ts
-const openaiClient = new OpenAI({
+export const openai = new OpenAI({
   baseURL: 'https://gateway.braintrust.dev',
   apiKey: process.env.BRAINTRUST_API_KEY,
 })
@@ -134,7 +138,7 @@ OpenAI directly instead, swap `baseURL`/`apiKey` for `process.env.OPENAI_API_KEY
 │   └── lib/
 │       ├── chatbot/      # Tool definitions, tool executor, system prompt
 │       ├── services/     # Data access (orders, payments, plans, refunds, users)
-│       ├── braintrust.ts # Braintrust logger, traced OpenAI client
+│       ├── braintrust.ts # Gateway OpenAI client, tool-span helpers
 │       └── prisma.ts     # Prisma client singleton
 └── prisma/
     ├── schema.prisma     # Database schema

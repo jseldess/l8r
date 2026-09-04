@@ -1,3 +1,5 @@
+import { wrapNextjsConfigWithBraintrust } from 'braintrust/next';
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   webpack: (config, { isServer }) => {
@@ -16,4 +18,4 @@ const nextConfig = {
   },
 };
 
-export default nextConfig;
+export default wrapNextjsConfigWithBraintrust(nextConfig);
