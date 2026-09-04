@@ -117,9 +117,10 @@ then reports the insufficient-funds reason and $2,847.50 available.
 ## Tracing
 
 Every chat request is traced to the Braintrust project `l8r-customer-service` whenever
-`BRAINTRUST_API_KEY` is set: `initLogger` in `src/lib/braintrust.ts`, an explicit
+`BRAINTRUST_API_KEY` is set: the bundler plugin in `next.config.mjs` plus `initLogger`
+in Next's instrumentation hook, an explicit
 `conversation` span plus `logger.traced` turn span in `src/app/api/chat/route.ts`,
-`wrapOpenAI` for LLM spans, and `wrapTracedTool` for per-tool spans. The first SSE frame
+auto-instrumentation for LLM spans, and `wrapTracedTool` for per-tool spans. The first SSE frame
 is `{"type":"span_id","spanId":"..."}` — the exported conversation span, which the client
 passes back as `parentSpanId` so later turns nest in the same trace.
 

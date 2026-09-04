@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
-import { openai, logger, updateSpan } from '@/lib/braintrust'
+import { startSpan, traced } from 'braintrust'
+import { openai, updateSpan } from '@/lib/braintrust'
 import { chatbotTools, executeTool, systemPrompt, ToolName, ChatMessage } from '@/lib/chatbot'
 import { ChatCompletionMessageParam } from 'openai/resources/chat/completions'
 
@@ -33,18 +34,18 @@ export async function POST(request: NextRequest) {
     const isFirstTurn = !parentSpanId
 
     // Span management for multi-turn conversations
-    let conversationSpan: ReturnType<typeof logger.startSpan> | null = null
+    let conversationSpan: ReturnType<typeof startSpan> | null = null
     let conversationSpanId: string
 
     if (isFirstTurn) {
-      conversationSpan = logger.startSpan({ name: 'conversation' })
+      conversationSpan = startSpan({ name: 'conversation' })
       conversationSpan.log({ metadata: { sessionId, type: 'multi_turn_conversation' } })
       conversationSpanId = await conversationSpan.export()
     } else {
       conversationSpanId = parentSpanId
     }
 
-    return await logger.traced(
+    return await traced(
       async (turnSpan) => {
         turnSpan.log({
           input: messages[messages.length - 1]?.content,
